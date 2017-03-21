@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
-	api "k8s.io/client-go/1.5/pkg/api/v1"
 	apiext "k8s.io/client-go/1.5/pkg/apis/extensions/v1beta1"
 
 	"github.com/weaveworks/flux/platform"
@@ -27,8 +26,7 @@ func (c podController) newApply(newDefinition *apiObject, async bool) (*apply, e
 		result.exec = deploymentExec(c.Deployment, newDefinition, async)
 		result.summary = "Applying deployment"
 	} else if c.ReplicationController != nil {
-		result.exec = rollingUpgradeExec(c.ReplicationController, newDefinition, async)
-		result.summary = "Rolling upgrade"
+		return nil, ErrReplicationControllersDeprecated
 	} else {
 		return nil, platform.ErrNoMatching
 	}
@@ -84,27 +82,6 @@ func (c *Cluster) doApplyCommand(logger log.Logger, newDefinition *apiObject, ar
 	}
 	logger.Log("result", result, "took", time.Since(begin).String())
 	return err
-}
-
-func rollingUpgradeExec(def *api.ReplicationController, newDef *apiObject, async bool) applyExecFunc {
-	return func(c *Cluster, logger log.Logger) error {
-		errc := make(chan error)
-		go func() {
-			errc <- c.doApplyCommand(
-				logger,
-				newDef,
-				"rolling-update",
-				"--update-period", "3s",
-				"--namespace", def.Namespace,
-				def.Name,
-				"-f", "-", // take definition from stdin
-			)
-		}()
-		if async {
-			return nil
-		}
-		return <-errc
-	}
 }
 
 func deploymentExec(def *apiext.Deployment, newDef *apiObject, async bool) applyExecFunc {
